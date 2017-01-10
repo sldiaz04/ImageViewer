@@ -2,69 +2,63 @@ package imageviewer.persistence.files;
 
 import imageviewer.model.Image;
 import imageviewer.persistence.ImageLoader;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FilenameFilter;
-import java.io.IOException;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 
-public class FileImageLoader implements ImageLoader{
-    private final static String [] ImageExtensions = new String[] {"jpg","png","bmp"};
-    private final File [] files;
-
-    public FileImageLoader(String folder) {
-        this.files = new File(folder).listFiles(withImageExtension());
+public class FileImageLoader implements ImageLoader {
+    
+    private List<byte[]> images = new ArrayList<>();
+    
+    public FileImageLoader(String name) {
+        try {
+            loadImagesFrom(name);
+        } 
+        catch (ClassNotFoundException | SQLException ex) {
+        }
     }
+    
     @Override
     public Image load() {
         return imageAt(0);
     }
-    
-    private Image imageAt(int index){
+
+    private void loadImagesFrom(String name) throws ClassNotFoundException, SQLException {
+        Class.forName("org.sqlite.JDBC");
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + name); 
+            Statement statement = connection.createStatement()) {
+            statement.execute("SELECT * FROM paisaje;");
+            ResultSet resultSet = statement.getResultSet();
+            while (resultSet.next()) {
+                images.add(resultSet.getBytes("image"));
+            }
+        }
+    }
+
+    private Image imageAt(final int index) {
         return new Image() {
 
             @Override
-            public byte[] bitmap() {
-                try {
-                    FileInputStream is = new FileInputStream(files[index]);
-                    return read(is);
-                } catch (IOException ex) {
-                    return new byte[0];
-                }
+            public InputStream inputStream() {
+                return new ByteArrayInputStream(images.get(index));
             }
-
-            private byte[] read(FileInputStream is) throws IOException {
-                byte[] buffer = new byte[4096];
-                ByteArrayOutputStream os = new ByteArrayOutputStream();
-                while(true){
-                    int length = is.read(buffer);
-                    if(length < 0) break;
-                    os.write(buffer, 0, length);
-                }
-                return os.toByteArray();
-            }
-
-                    @Override
-                    public Image next() {
-                        return (index < files.length -1) ? imageAt( index + 1) : imageAt(0);
-                    }
-
-                    @Override
-                    public Image prev() {
-                        return (index > 0)? imageAt( index - 1) : imageAt(files.length -1);
-                    }
-        };
-    }
-
-    private FilenameFilter withImageExtension() {
-        return new FilenameFilter() {
 
             @Override
-            public boolean accept(File dir, String name) {
-                for (String extension : ImageExtensions) {
-                    if(name.endsWith(extension)) return true;
-                }
-                return false;
+            public Image next() {
+                if (index == images.size() - 1) return imageAt(0);
+                return imageAt(index + 1);
+            }
+
+            @Override
+            public Image prev() {
+                if (index == 0) return imageAt(images.size() - 1);
+                return imageAt(index - 1);
             }
         };
     }

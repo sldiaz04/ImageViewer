@@ -1,8 +1,12 @@
 package imageviewer.model;
 
+import java.io.InputStream;
+
 public interface Image {
 
-    byte[] bitmap();
+    InputStream inputStream();
     Image next();
     Image prev();
+
+    
 }
